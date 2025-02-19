@@ -1,0 +1,76 @@
+name: Update Template Files
+on:
+  workflow_dispatch:
+    inputs:
+      skip_pattern:
+        description: 'Regex pattern to skip files (e.g.: ".*\.md$")'
+        required: false
+        default: ''
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: write
+    steps:
+      - name: Checkout current repo
+        uses: actions/checkout@v4
+
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          persist-credentials: true
+
+      - name: Configure git
+        run: |
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
+
+      - name: Clone template repo
+        run: |
+          REPO_URL=$(jq -r '.src' .github/settings/repo-config.json)
+          git clone "$REPO_URL" template-repo --depth 1
+
+      - name: Copy relevant files
+        run: |
+          # Copy .github directory excluding settings
+          echo "🔄 Syncing files from template..."
+          rsync -av --delete template-repo/.github/ .github/ --exclude=settings
+          
+          echo "📂 Current directory structure:"
+          ls -al .github
+          
+          echo "🔍 Changed files detection:"
+          git status --porcelain
+
+          # Restore workflow files if using default token
+          if [ "${{ !secrets.GHTOKEN }}" = "true" ]; then
+            echo "⏩ Restoring workflow files (using default token)"
+            git restore .github/workflows/*
+          fi
+
+          # Clean up template files
+          rm -rf template-repo
+
+          # Restore skipped files if pattern provided
+          if [ -n "${{ inputs.skip_pattern }}" ]; then
+            echo "⏩ Restoring files matching pattern: ${{ inputs.skip_pattern }}"
+            git restore $(git ls-files | grep -E "${{ inputs.skip_pattern }}")
+          fi
+
+      - name: Commit and push changes
+        run: |
+          echo "💾 Staging changes..."
+          git add .
+          
+          echo "📄 Final changes to commit:"
+          git status --porcelain
+          
+          # Check if there are staged changes
+          if [ -n "$(git status --porcelain)" ]; then
+            git commit -m "chore: Update template files$([ "${{ inputs.skip_pattern }}" ] && echo " (skipped ${{ inputs.skip_pattern }})")"
+            git push https://x-access-token:${{ secrets.GHTOKEN || secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git --force-with-lease ":!.github/workflows/*"
+            echo "✅ Successfully pushed changes"
+          else
+            echo "🟢 No changes to commit - everything up to date"
+          fi

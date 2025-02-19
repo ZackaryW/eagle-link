@@ -1,0 +1,10 @@
+{
+    "id": "539bb5f0-d3eb-4234-9ad3-12481e158fca",
+    "version": "1.0.0",
+    "platform": "all",
+    "arch": "all",
+    "name": "{{manifest.app.name}}",
+    "logo": "/logo.png",
+    "keywords": [],
+    "devTools": true
+}

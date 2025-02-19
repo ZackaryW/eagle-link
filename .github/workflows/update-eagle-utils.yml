@@ -1,0 +1,22 @@
+name: Update Eagle Utils
+
+on:
+  workflow_dispatch:
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout current repository
+        uses: actions/checkout@v4
+
+      - name: Update utils with Python script
+        run: |
+          python3 .github/scripts/update_utils.py
+
+      - name: Commit and push changes
+        run: |
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
+          git add ./utils
+          git diff --quiet && git diff --staged --quiet || (git commit -m "Update eagle utils from source repository"; git push)
