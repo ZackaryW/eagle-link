@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+	<script src="app.js"></script>
+	<link rel="stylesheet" href="app.css">
+	<link rel="stylesheet" href="service.css">
+	<script src="./struct.js"></script>
+</head>
+<body>
+	<div class="toggle-switch">
+		<div class="config-level" id="configLevel"></div>
+		<label class="switch">
+			<input type="checkbox" id="clipboardToggle">
+			<span class="slider"></span>
+		</label>
+	</div>
+	<br><br><br><br><br><br>
+	<div class="content-area">
+		<div class="library-list"></div>
+	</div>
+
+	<!-- Add modal HTML at body end -->
+	<div class="modal-overlay hidden">
+		<div class="modal-content">
+			<h3>Select Library</h3>
+			<select class="library-select" id="librarySelect"></select>
+			<div class="modal-actions">
+				<button class="modal-cancel">Cancel</button>
+				<button class="modal-confirm">Confirm</button>
+			</div>
+		</div>
+	</div>
+
+	<script>
+		let clipboardCheckInterval;
+		let clipboardCache = null;
+		let shiftKeyIsDown = false;
+		let libraries = null;
+		let libraryAtLink = null;
+		
+
+		async function createLibraryList(){
+			const {EagleApi, EagleApiUtils} = require(path.join(eagle.plugin.path, 'utils', 'api'));
+			libraries = await EagleApi.library.history();
+			
+			// Normalize paths and remove duplicates
+			const uniquePaths = new Set(
+				libraries.map(libPath => path.normalize(libPath).replace(/[\\/]+$/, ''))
+			);
+			libraries = Array.from(uniquePaths);
+		}
+
+		async function createTableOfEagleLibraries() {
+			try {
+				const {EagleApi, EagleApiUtils} = require(path.join(eagle.plugin.path, 'utils', 'api'));
+				
+				const table = document.createElement('table');
+				const tbody = document.createElement('tbody');
+				table.className = 'library-table';
+				
+				libraries.forEach(libraryPath => {
+					const libName = path.basename(libraryPath).replace('.library', '');
+					
+					const row = document.createElement('tr');
+					row.className = 'library-row';
+					row.dataset.libraryPath = libraryPath;
+					row.innerHTML = `
+						<td class="library-name">${libName}</td>
+					`;
+					
+					row.addEventListener('click', async () => {
+						try {
+							console.log('switching to library:', libraryPath);
+							await EagleApi.library.switch(libraryPath);
+							
+							row.classList.add('active');
+							setTimeout(() => row.classList.remove('active'), 500);
+						} catch (error) {
+							console.error('Failed to switch library:', error);
+							row.classList.add('error');
+							setTimeout(() => row.classList.remove('error'), 2000);
+						}
+					});
+					
+					tbody.appendChild(row);
+				});
+
+				table.appendChild(tbody);
+				const contentArea = document.querySelector('.content-area');
+				contentArea.innerHTML = '';
+				contentArea.appendChild(table);
+				
+			} catch (error) {
+				console.error('Failed to load libraries:', error);
+				const errorElement = document.createElement('div');
+				errorElement.className = 'error-message';
+				errorElement.textContent = 'Failed to load libraries. Please check the developer tools for details.';
+				document.querySelector('.content-area').appendChild(errorElement);
+			}
+		}
+
+		async function checkClipboardContent() {
+			const {PerPluginConfig} = require(path.join(eagle.plugin.path, 'utils', 'perPluginConfig.js'));
+			const toggleTrackClipboard = await PerPluginConfig.get('toggleForClipboardListen')
+			if (!toggleTrackClipboard) return;  // Add check for toggle state
+			
+			try {
+				//TODO currently theres a bug in has behavior
+				const text = await eagle.clipboard.readText();
+				if (text == clipboardCache) return;
+				clipboardCache = text;
+
+				// if is string and not empty
+				if (typeof text === 'string' && text.length > 0 && (
+					text.startsWith('http://localhost:41595') 
+					|| text.startsWith("eagle://")
+				) && !text.includes(' ')) {
+					console.log('eagle link detected in clipboard:', text);
+					libraryAtLink = eagle.library.path;
+					await eagle.window.show();
+					await createModal(text);
+				}
+			} catch (err) {
+				console.error('Clipboard check failed:', err);
+			}
+		}
+
+		function updateLevelIndicator(scope) {
+			const levelElement = document.getElementById('configLevel');
+			levelElement.textContent = scope === 'library' 
+				? 'Library Setting' 
+				: 'Global Setting';
+		}
+
+		eagle.onPluginRun(async () => {
+			console.log("eagle.onPluginRun");
+			await createLibraryList();
+			await createTableOfEagleLibraries();
+			
+
+			const toggleElement = document.getElementById('clipboardToggle');
+			const {PerPluginConfig} = require(path.join(eagle.plugin.path, 'utils', 'perPluginConfig.js'));
+			
+			toggleElement.checked = await PerPluginConfig.get('toggleForClipboardListen', {
+				libraryId: eagle.library.path
+			});
+			const isLibrary = await PerPluginConfig.getForLibrary(eagle.library.path, 'toggleForClipboardListen');
+			updateLevelIndicator(isLibrary !== undefined ? 'library' : 'global');
+
+			// Event listener with shift key handling
+			toggleElement.addEventListener('change', async function(event) {
+				const isChecked = this.checked;
+				
+				if (!isChecked) {
+					await PerPluginConfig.pop('toggleForClipboardListen', {
+						libraryId: eagle.library.path
+					});
+					updateLevelIndicator('global');
+					return;
+				}
+
+				if (!shiftKeyIsDown) {
+					await PerPluginConfig.setGlobal('toggleForClipboardListen', isChecked);
+					updateLevelIndicator('global');
+					return;
+				}
+				shiftKeyIsDown = false;
+				
+				await PerPluginConfig.setLibrary(eagle.library.path, 'toggleForClipboardListen', isChecked);
+				updateLevelIndicator('library');
+					
+			});
+
+			clipboardCheckInterval = setInterval(checkClipboardContent, 500);
+			
+
+			document.addEventListener('keydown', (event) => {
+				if (event.shiftKey && !shiftKeyIsDown) {
+					shiftKeyIsDown = true;
+				}
+			});
+			
+			document.addEventListener('keyup', (event) => {
+				if (shiftKeyIsDown) {
+					shiftKeyIsDown = false;
+				}
+			});
+			
+		});
+
+		eagle.onPluginBeforeExit(() => {
+			console.log("eagle.onPluginBeforeExit");
+			clearInterval(clipboardCheckInterval);
+		});
+
+		async function createModal(link) {
+			const modal = document.querySelector('.modal-overlay');
+			const select = modal.querySelector('#librarySelect');
+			
+			// Populate select
+			const options = []
+			options.push(`
+				<option value="current">
+					Current Library
+				</option>
+			`);
+			libraries.forEach(libPath => {
+				const libName = path.basename(libPath).replace('.library', '');
+				options.push(`
+					<option value="${libPath}">
+						${libName}
+					</option>
+				`);
+			});
+			
+			select.innerHTML = options.join('');
+
+			// Remove existing event listeners
+			const confirmBtn = modal.querySelector('.modal-confirm');
+			const cancelBtn = modal.querySelector('.modal-cancel');
+			confirmBtn.replaceWith(confirmBtn.cloneNode(true));
+			cancelBtn.replaceWith(cancelBtn.cloneNode(true));
+
+			// Add new event listeners
+			modal.querySelector('.modal-confirm').addEventListener('click', async () => {
+				const selectedPath = select.value === "current" ? null : select.value;
+				console.log('Processing link with library:', link);
+				modal.classList.add('hidden');
+				const eagleLink = EagleLink.fromLink(link, libraryAtLink);
+				console.log(eagleLink);
+
+				const tempFile = path.join(eagle.os.tmpdir(), 'untitled.eagleLink');
+				await eagleLink.toFile(tempFile);
+
+				const currentFolders = await eagle.folder.getSelected();
+				if (selectedPath) {
+					await eagle.library.switch(selectedPath);
+				}
+				await eagle.item.addFromPath(
+					tempFile, {
+						folders: currentFolders.map(currentFolder => currentFolder.id)
+					}
+				)
+
+			});
+
+			modal.querySelector('.modal-cancel').addEventListener('click', () => {
+				modal.classList.add('hidden');
+			});
+
+			modal.addEventListener('click', (e) => {
+				if(e.target.classList.contains('modal-overlay')) {
+					modal.classList.add('hidden');
+				}
+			});
+
+			// Show modal
+			modal.classList.remove('hidden');
+		}
+	</script>
+</body>
+</html>

@@ -19,7 +19,9 @@ const { roamingPath } = require('./app');
 class PluginConfigInternal {
     static _settingsCache = new JsonCache(
         path.join(roamingPath, 'pluginConfig.json'),
-        true 
+        {
+            autoSaveOnExit: true,
+        }
     );
     static _path = path.join(roamingPath, 'pluginConfig.json');
     
@@ -130,6 +132,20 @@ class PluginConfigInternal {
             this.#releaseLock();
         }
     }
+
+    static async popRaw(key, options = {}) {
+        await this.#acquireLock();
+        try {
+            const val = this._settingsCache.data[key];
+            delete this._settingsCache.data[key];
+            if (options.save !== false) {  // Default true
+                await this._settingsCache.save();
+            }
+            return val;
+        } finally {
+            this.#releaseLock();
+        }
+    }
 }
 
 /**
@@ -148,6 +164,7 @@ class PluginConfig {
     static setDefaultRaw = (...args) => PluginConfigInternal.setDefaultRaw(...args);
     static save = (...args) => PluginConfigInternal.save(...args);
     static containsRaw = (...args) => PluginConfigInternal.containsRaw(...args);
+    static popRaw = (...args) => PluginConfigInternal.popRaw(...args);
 
     /**
      * Async generator yielding all raw configuration entries
@@ -238,6 +255,70 @@ class PluginConfig {
     // Note: containsGlobal is duplicate of hasGlobal, consider deprecating
     static async containsGlobal(key) {
         return await PluginConfigInternal.containsRaw(key);
+    }
+
+    /**
+     * Pop namespaced configuration key for current plugin
+     * @param {string} key - Local configuration key
+     * @param {Object} [options] - Configuration options
+     * @param {boolean} [options.save=true] - Whether to persist changes immediately
+     */
+    static async popLocal(key, options) {
+        return this.popRaw(this.#localKey(key), options);
+    }
+
+    /**
+     * Pop global configuration key
+     * @param {string} key - Global configuration key
+     * @param {Object} [options] - Configuration options
+     * @param {boolean} [options.save=true] - Whether to persist changes immediately
+     */
+    static async popGlobal(key, options) {
+        return this.popRaw(key, options);
+    }
+
+    // Add private method declaration
+    static #localKey(key) {
+        return `${PluginConfigInternal.pluginScopeMarker}${eagle.plugin.manifest.id}${PluginConfigInternal.pluginScopeSeparator}${key}`;
+    }
+
+    /**
+     * Pop values from both local and global scopes
+     * @param {string} key - Key to pop from both scopes
+     * @param {Object} [options] - Configuration options
+     * @param {'local'|'global'|'first'|'last'} [options.returnScope='first'] - Which value to return
+     * @param {boolean} [options.save=true] - Whether to persist changes
+     */
+    static async pop(key, options = {}) {
+        const localKey = this.#localKey(key);
+        const globalKey = key;
+        
+        // Pop both values without saving yet
+        const localVal = await this.popRaw(localKey, { save: false });
+        const globalVal = await this.popRaw(globalKey, { save: false });
+        
+        let returnVal;
+        switch(options.returnScope || 'first') {
+            case 'local':
+                returnVal = localVal;
+                break;
+            case 'global':
+                returnVal = globalVal;
+                break;
+            case 'first':
+                returnVal = typeof localVal !== 'undefined' ? localVal : globalVal;
+                break;
+            case 'last':
+                returnVal = typeof globalVal !== 'undefined' ? globalVal : localVal;
+                break;
+        }
+
+        // Save once if requested
+        if (options.save !== false) {
+            await this.save();
+        }
+
+        return returnVal;
     }
 }
 

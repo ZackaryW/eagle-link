@@ -19,7 +19,6 @@ async function updateTheme() {
 	htmlEl.classList.remove("no-transition");
 }
 
-
 eagle.onPluginCreate(async () => {
 	console.log("eagle.onPluginCreate");
 	await updateTheme();
@@ -46,3 +45,4 @@ eagle.onPluginHide(() => {
 eagle.onPluginBeforeExit((event) => {
 	console.log("eagle.onPluginBeforeExit");
 });
+

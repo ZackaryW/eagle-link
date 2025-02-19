@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+	<script src="app.js"></script>
+	<link rel="stylesheet" href="app.css">
+	<script src="./struct.js"></script>
+</head>
+<body>
+    <script>
+
+        eagle.onPluginCreate(async () => {
+            console.log("eagle.onPluginCreate");
+        });
+
+        eagle.onPluginRun(async () => {
+            console.log("eagle.onPluginRun");
+            const urlParams = new URLSearchParams(window.location.search);
+            const id = urlParams.get('id');
+            const filePath = urlParams.get('path');
+            const eagleLink = await EagleLink.fromFileJson(filePath);
+            console.log(eagleLink);
+            await eagleLink.open();
+        });
+
+    </script>
+</body>
+</html>

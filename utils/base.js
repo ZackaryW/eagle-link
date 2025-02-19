@@ -50,12 +50,21 @@ class fnCache {
  * JSON file caching system with file watching and automatic updates
  * @class
  * @param {string} path - Path to JSON file
- * @param {boolean} [changeListener=false] - Enable periodic change checking
- * @param {boolean} [touchFile=true] - Create file if it doesn't exist
+ * @param {Object} [options] - Configuration options
+ * @param {boolean} [options.changeListener=false] - Enable periodic change checking
+ * @param {boolean} [options.touchFile=true] - Create file if it doesn't exist
+ * @param {boolean} [options.autoSaveOnExit=true] - Automatically save data on process exit
  * @throws {Error} If file doesn't exist and touchFile is false
  */
 class JsonCache {
-    constructor(path, changeListener = false, touchFile = true) {
+    static #instances = new Map();
+
+    constructor(path, options = {}) {
+        if (JsonCache.#instances.has(path)) {
+            return JsonCache.#instances.get(path);
+        }
+
+        const { changeListener = false, touchFile = true, autoSaveOnExit = true } = options;
         this._path = path;
         this._changeListener = changeListener;
         this._cachedData = null;
@@ -74,6 +83,13 @@ class JsonCache {
                 this.updateCache();
             }
         });
+
+        // Auto-save on process exit
+        if (autoSaveOnExit) {
+            process.on('beforeExit', () => this.save());
+        }
+
+        JsonCache.#instances.set(path, this);
     }
 
     updateCache() {
@@ -210,13 +226,32 @@ async function nativeUnzip(src, dest, debug = false) {
     });
 }
 
+const LibraryIDToPath = new Map();
 
+function getLibraryId(path = null){
+    if (!path){
+        path = eagle.library.path;
+    }
+
+    if (LibraryIDToPath.has(path)){
+        return LibraryIDToPath.get(path);
+    }
+
+    const crypto = require('crypto');
+    const hash = crypto.createHash('md5');
+    hash.update(path);
+    const hex = hash.digest('hex');
+    LibraryIDToPath.set(path, hex);
+    return hex;
+}
 
 module.exports = {
     cache,
     JsonCache,
     fnCache,
     overloadStaticGetters,
-    nativeUnzip
+    nativeUnzip,
+    getLibraryId,
+    LibraryIDToPath
 }
 
