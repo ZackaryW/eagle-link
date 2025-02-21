@@ -51,7 +51,16 @@ class ClipboardBaseManager {
         modal.innerHTML = `
             <div class="modal-content">
                 <div class="modal-body">
-                    <div id="base-library-select-container" style="color: white;"></div>
+                    <div id="base-library-select-container" style="color: white;">
+                        <div class="search-container">
+                            <input type="text" 
+                                   id="libraryInput" 
+                                   class="search-bar" 
+                                   placeholder="Select or type library..."
+                                   autocomplete="off">
+                            <div class="dropdown-options" id="libraryDropdown"></div>
+                        </div>
+                    </div>
                 </div>
                 <div class="modal-actions">
                     <button class="modal-confirm">Confirm</button>
@@ -64,9 +73,70 @@ class ClipboardBaseManager {
 
     #addBaseComponents(modal, libraries) {
         const container = modal.querySelector('#base-library-select-container');
-        container.appendChild(this.createLibrarySelect(libraries));
         container.insertAdjacentHTML('afterbegin', 
             '<p class="library-prompt">Add to library:</p>');
+        
+        const input = container.querySelector('#libraryInput');
+        const dropdown = container.querySelector('#libraryDropdown');
+        
+        // Show dropdown when input is focused
+        input.addEventListener('focus', () => {
+            dropdown.style.display = 'block';
+            this.filterDropdown(input, dropdown);
+        });
+        
+        // Pass input reference when populating
+        this.populateLibraryDropdown(input, dropdown, libraries);
+    }
+
+    // Updated method signature
+    populateLibraryDropdown(input, dropdown, libraries) {
+        dropdown.innerHTML = '';
+        
+        // Current Library option
+        const currentOption = document.createElement('div');
+        currentOption.className = 'dropdown-option';
+        currentOption.dataset.value = 'current';
+        currentOption.textContent = 'Current Library';
+        currentOption.addEventListener('click', () => {
+            input.value = 'Current Library';
+            dropdown.style.display = 'none';
+        });
+        dropdown.appendChild(currentOption);
+
+        // Other libraries
+        libraries.forEach(lib => {
+            const option = document.createElement('div');
+            option.className = 'dropdown-option';
+            option.dataset.value = lib;
+            option.textContent = path.basename(lib).replace(/\.library$/, '');
+            option.addEventListener('click', () => {
+                input.value = option.textContent;
+                input.dataset.selectedValue = option.dataset.value;
+                dropdown.style.display = 'none';
+            });
+            dropdown.appendChild(option);
+        });
+
+        // Add click outside handler
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.search-container')) {
+                dropdown.style.display = 'none';
+            }
+        });
+    }
+
+    // Updated filterDropdown parameters
+    filterDropdown(input, dropdown) {
+        const searchTerm = input.value.toLowerCase();
+        const options = dropdown.querySelectorAll('.dropdown-option');
+        
+        options.forEach(option => {
+            const text = option.textContent.toLowerCase();
+            option.style.display = text.includes(searchTerm) ? 'block' : 'none';
+        });
+        
+        dropdown.style.display = 'block';
     }
 
     // Shared library selection creation

@@ -23,9 +23,11 @@ class PathstrHandler {
         return new Promise((resolve) => {
             ctx.modal.querySelector('.modal-confirm').addEventListener('click', async () => {
                 try {
-                    const selectedPath = ctx.librarySelect.value === "current" 
-                        ? this.eagle.library.path 
-                        : ctx.librarySelect.value;
+                    const inputValue = ctx.modal.querySelector('#libraryInput').value;
+                    const selectedOption = Array.from(ctx.modal.querySelectorAll('.dropdown-option'))
+                        .find(option => option.textContent === inputValue);
+                    const selectedValue = selectedOption?.dataset.value || 'current';
+                    const selectedPath = selectedValue === 'current' ? eagle.library.path : selectedValue;
                     
                     const targetPath = path.resolve(ctx.text);
                     const tempFile = path.join(
@@ -34,9 +36,16 @@ class PathstrHandler {
                     );
 
                     // Create EagleLink instance and save to temp file
-                    const eagleLink = EagleLink.fromPath(targetPath);
+                    const eagleLink = EagleLink.fromPath(targetPath, selectedPath);
                     const folders = await this.eagle.folder.getSelected();
                     await eagleLink.toFile(tempFile);
+                    
+                    if (selectedPath != ctx.currentLibrary) {
+                        const { EagleApi} = require(path.join(eagle.plugin.path, 'utils', 'api'));
+                        await EagleApi.library.switch(selectedPath);
+                        // wait for 1 second
+                        await new Promise(resolve => setTimeout(resolve, 1000));
+                    }
                     
                     // Add to Eagle library
                     await this.eagle.item.addFromPath(tempFile, {

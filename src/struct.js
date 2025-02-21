@@ -49,13 +49,13 @@ class EagleLink {
         }
     }
 
-    static fromPath(filePath) {
+    static fromPath(filePath, destPath = null) {
         const fs = require("fs");
         const path = require("path");
         // get absolute path
         const absPath = fs.realpathSync(filePath);
         // get relative path to current library
-        const relPath = path.relative(eagle.library.path, absPath);
+        const relPath = path.relative(destPath, absPath);
         return new EagleLink(null, null, null, relPath);
     }
 
