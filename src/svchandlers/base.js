@@ -39,7 +39,8 @@ class ClipboardBaseManager {
             libraries: context.libraries,
             modal,
             manager: this,
-            librarySelect: modal.querySelector('#libraryInput') // Add reference
+            librarySelect: modal.querySelector('#libraryInput'), // Add reference
+            handler: handler // Add handler to context
         };
 
         return handler.handle(ctx);
@@ -182,6 +183,52 @@ class ClipboardBaseManager {
                 modal.remove();
             });
         });
+    }
+
+    setupModalHandlers(ctx, processFn) {
+        return new Promise((resolve) => {
+            ctx.modal.querySelector('.modal-confirm').addEventListener('click', async () => {
+                try {
+                    const selectedPath = this.getSelectedLibrary(ctx.modal);
+                    
+                    // Add pre-callback execution
+                    if (typeof ctx.handler.preCallback === 'function') {
+                        ctx.handlerData = await ctx.handler.preCallback(ctx);
+                    }
+
+                    // Common library switching logic
+                    if (selectedPath !== ctx.currentLibrary) {
+                        const { EagleApi } = require(path.join(eagle.plugin.path, 'utils', 'api'));
+                        await EagleApi.library.switch(selectedPath);
+                        await new Promise(resolve => setTimeout(resolve, 1000));
+                    }
+
+                    // Execute handler-specific processing with stored data
+                    await processFn(ctx, selectedPath);
+                    
+                    resolve(true);
+                } catch(e) {
+                    console.error('Processing failed:', e);
+                    resolve(false);
+                } finally {
+                    ctx.modal.remove();
+                    ctx.handlerData = null; // Reset stored data
+                }
+            });
+
+            ctx.modal.querySelector('.modal-cancel').addEventListener('click', () => {
+                resolve(false);
+                ctx.modal.remove();
+            });
+        });
+    }
+
+    getSelectedLibrary(modal) {
+        const inputValue = modal.querySelector('#libraryInput').value;
+        const selectedOption = Array.from(modal.querySelectorAll('.dropdown-option'))
+            .find(option => option.textContent === inputValue);
+        const selectedValue = selectedOption?.dataset.value || 'current';
+        return selectedValue === 'current' ? eagle.library.path : selectedValue;
     }
 }
 
