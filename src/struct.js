@@ -2,24 +2,31 @@ const path = require("path");
 const fs = require("fs").promises;
 
 class EagleLink {
-    constructor(libraryName, id = null, type = null) {
+    constructor(libraryName = null, id = null, type = null, osPath = null) {
         this.id = id;
         this.type = type;
         this.libraryName = libraryName;
+        this.osPath = osPath;
+
+        // if osPath is set, cannot have anything else
+        if (osPath != null && (id != null || type != null || libraryName != null)){
+            throw new Error("osPath is set, cannot have anything else");
+        }
     }
 
     static async fromFileJson(path) {
         const data = await fs.readFile(path, 'utf8');
         const json = JSON.parse(data);
-        const { libraryName, id, type } = json;
-        return new EagleLink(libraryName, id, type);
+        const { libraryName, id, type, osPath } = json;
+        return new EagleLink(libraryName, id, type, osPath);
     }
 
     async toFile(path){
         const json = {
             libraryName: this.libraryName,
             id: this.id,
-            type: this.type
+            type: this.type,
+            osPath: this.osPath
         }
         await fs.writeFile(path, JSON.stringify(json, null, 2));
     }
@@ -38,8 +45,18 @@ class EagleLink {
             const raw = link.split("http://localhost:41595/")[1];
             const type = raw.split('?')[0];
             const id = raw.split('=')[1];
-            return new EagleLink(libraryName, id, type);
+            return new EagleLink(libraryName, id, type, null);
         }
+    }
+
+    static fromPath(filePath) {
+        const fs = require("fs");
+        const path = require("path");
+        // get absolute path
+        const absPath = fs.realpathSync(filePath);
+        // get relative path to current library
+        const relPath = path.relative(eagle.library.path, absPath);
+        return new EagleLink(null, null, null, relPath);
     }
 
     get isCurrentLibrary(){
@@ -81,6 +98,18 @@ class EagleLink {
 
     async open(){
         const path = require("path");
+        if (this.osPath != null){
+            // check if this path is absolute
+            if (path.isAbsolute(this.osPath)){
+                eagle.shell.openPath(this.osPath);
+            } else {
+                // relative to current library
+                eagle.shell.openPath(path.resolve(eagle.library.path, this.osPath));
+            }
+            
+            return;
+        }
+        
         const { EagleApiUtils } = require(path.join(__dirname, "utils", "api"));
         const isCurrentLibrary = this.isCurrentLibrary;
         this.#createOpenLink(!isCurrentLibrary);
