@@ -121,3 +121,26 @@ main div#content {
 a {
 	color: var(--color-text-secondary);
 }
+
+/* Add table styling */
+#folderContents {
+	color: var(--color-text-primary);
+	user-select: none;
+}
+
+#folderContents th {
+	color: var(--color-text-secondary);
+	font-weight: 500;
+	padding: 8px 12px;
+	text-align: left;
+}
+
+#folderContents td {
+	padding: 8px 12px;
+	cursor: pointer;
+	transition: background-color 0.1s ease;
+}
+
+#folderContents td:hover {
+	background-color: var(--color-bg-hover);
+}

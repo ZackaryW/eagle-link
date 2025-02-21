@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="UTF-8" />
+        <meta
+            name="viewport"
+            content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"
+        />
+        <script src="app.js"></script>
+        <link rel="stylesheet" href="app.css" />
+        <link rel="stylesheet" href="service.css" />
+        <script src="./struct.js"></script>
+    </head>
+    <body>
+        <input type="text" id="folderSearch" placeholder="Search folders..." class="search-bar" style="display: none">
+        <table id="folderContents" style="width: 100%; display: none">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Type</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+        <br><br><br><br><br>
+
+        <script>
+            let folderContents = []; 
+
+            eagle.onPluginRun(async () => {
+                const selected = await eagle.item.getSelected();
+                if (selected.length != 1) return;
+                const filePath = selected[0].filePath;
+                if (!filePath) return;
+                const eagleLink = await EagleLink.fromFileJson(filePath);
+                if (!eagleLink.osPath) return;
+                const fs = require("fs").promises;
+                const path = require("path");
+                //first check if its an absolute path
+                let fullPath;
+                if (path.isAbsolute(eagleLink.osPath)) {
+                    fullPath = eagleLink.osPath;
+                } else {
+                    fullPath = path.join(eagle.library.path, eagleLink.osPath);
+                }
+
+                try {
+                    const stat = await fs.stat(fullPath);
+
+                    if (!stat.isDirectory()) return;
+
+                    folderContents = []; // Reset contents on each run
+                    const entries = await fs.readdir(fullPath);
+                    const table = document.getElementById("folderContents");
+                    const searchInput = document.getElementById('folderSearch');
+                    
+                    // Show both table and search bar
+                    table.style.display = "table";
+                    searchInput.style.display = "block";
+                    searchInput.value = ""; // Clear previous search
+
+                    // Add search functionality
+                    searchInput.addEventListener('input', (e) => {
+                        const searchTerm = e.target.value.toLowerCase();
+                        const rows = table.tBodies[0].querySelectorAll('tr');
+                        
+                        rows.forEach(row => {
+                            const name = row.querySelector('td:first-child').textContent.toLowerCase();
+                            row.style.display = name.includes(searchTerm) ? '' : 'none';
+                        });
+                    });
+
+                    for (const entry of entries) {
+                        const entryPath = path.join(fullPath, entry);
+                        const entryStat = await fs.stat(entryPath);
+
+                        // Store entry data
+                        folderContents.push({
+                            name: entry,
+                            type: entryStat.isDirectory() ? 'Folder' : 'File',
+                            path: entryPath
+                        });
+
+                        const row = document.createElement("tr");
+                        row.innerHTML = `
+                            <td>${entry}</td>
+                            <td>${
+                                entryStat.isDirectory() ? "Folder" : "File"
+                            }</td>
+                        `;
+                        row.onclick = () => eagle.shell.openPath(entryPath);
+                        table.tBodies[0].appendChild(row);
+                    }
+
+                    // Add right-click context menu
+                    table.addEventListener('contextmenu', (e) => {
+                        e.preventDefault();
+                        eagle.contextMenu.open([
+                            {
+                                id: "copyFolders",
+                                label: "Copy all folder names",
+                                click: () => {
+                                    const folderNames = folderContents
+                                        .filter(item => item.type === 'Folder')
+                                        .map(item => item.name)
+                                        .join('\n');
+                                    navigator.clipboard.writeText(folderNames);
+                                }
+                            }
+                        ]);
+                    });
+                } catch (error) {
+                    console.error("Error accessing path:", error);
+                }
+            });
+        </script>
+    </body>
+</html>
