@@ -1,3 +1,5 @@
+> ## There are too many things i wish to change for this plugin, therefore i am starting a new repo
+
 # Eagle Link Plugin
 
 A plugin for Eagle (eagle.cool) that enables seamless navigation between libraries and folders using EagleLink files.
