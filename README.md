@@ -1,4 +1,4 @@
-> ## There are too many things i wish to change for this plugin, therefore i am starting a new repo
+> This is the first experimentation to call external shell and creates a new file type (json based)
 
 # Eagle Link Plugin
 
